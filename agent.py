@@ -68,14 +68,15 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
     answer = ""
     turns = 1
     while response.stop_reason == "tool_use" and turns < MAX_TOOL_CALLS:
-        messages.append({"role": "assistant", "content": text_of(response)})
+        messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results(response)})
-        answer = text_of(response)
+     
         response = client.messages.create(
             model=MODEL, max_tokens=4096, system=runtime_preamble() + SYSTEM_PROMPT + TONE_ADDENDUM,
             thinking={"type": "adaptive"}, tools=tools, messages=messages,
         )
         turns += 1
+        answer = text_of(response)
 
     return answer
 
@@ -119,17 +120,27 @@ def build_tools() -> List[Dict[str, Any]]:                 # ✏️ Build 1, ste
                 "type": "object",
                 "properties": {
                     "flight_no": {"type": "string"},
-                    "date": {"type": "string", "description": "MM/DD/YYYY"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
                 },
                 "required": ["flight_no", "date"],
             },
         },
         {
             "name": "search_alternatives",
-            "description": "search",
+            "description": (
+                "Find rebooking alternatives for the disrupted segment on this booking. "
+                "Call it only after lookup_booking and get_flight_status have shown the "
+                "flight is cancelled or delayed enough that the customer may need to move; "
+                "never for an on-time flight. Returns the available options, each with an "
+                "option_id: hold_seat takes that option_id to hold a seat, and check_policy "
+                "takes it as chosen_option_id once the customer picks one. Never offer or "
+                "describe an alternative that did not come back from this tool."
+            ),
             "input_schema": {
                 "type": "object",
-                "properties": {"pnr": {"type": "string"}},
+                "properties": {
+                    "pnr": {"type": "string", "description": "The booking's confirmation code, the same PNR used in lookup_booking."},
+                },
                 "required": ["pnr"],
             },
         },
