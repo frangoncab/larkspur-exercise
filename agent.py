@@ -17,8 +17,73 @@ from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
 MAX_TOOL_CALLS = 8  # Larkspur's own build capped the loop here; then a human takes over.
 
 TONE_ADDENDUM = ""                       # ✏️ Build 4, step 4.1, intelligence goal
-EXTRA_TOOLS: List[Dict[str, Any]] = []   # ✏️ Build 2, step 2.1: schemas for the tools you add
-LOCAL_TOOLS: Dict[str, Any] = {}         # ✏️ Build 2, step 2.1: the functions behind them
+EXTRA_TOOLS: List[Dict[str, Any]] = [{
+    "name": "reopen_stats",
+    "description": (
+        "Retrieve historical reopen statistics relevant to a booking and type of "
+        "customer issue. Use this tool when the customer wants to know how often "
+        "the same kind of problem comes back after it has been handled. Returns "
+        "how frequently similar issues reappeared within 72 hours based on "
+        "previously handled conversations."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "pnr": {
+                "type": "string",
+                "description": "The booking confirmation code (PNR)."
+            },
+            "issue_type": {
+                "type": "string",
+                "description": (
+                    "The type of customer issue for which to retrieve historical "
+                    "reopen statistics."
+                ),
+            },
+        },
+        "required": ["pnr", "issue_type"],
+    },
+}]   # ✏️ Build 2, step 2.1: schemas for the tools you add
+def reopen_stats(pnr: str, issue_type: str) -> Dict[str, Any]:
+    """How often each kind of problem came back within 72 hours, from the
+    human-handled transcripts sample. The transcripts are redacted, so pnr
+    cannot be matched to a conversation; it is accepted and echoed only."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent / "data" / "americas" / "transcripts_sample.jsonl"
+    by_kind: Dict[str, Dict[str, Any]] = {}
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            kind = by_kind.setdefault(row["intent_label"],
+                                      {"conversations": 0, "reopened_within_72h": 0, "reopen_reasons": []})
+            kind["conversations"] += 1
+            if row.get("reopened_within_72h"):
+                kind["reopened_within_72h"] += 1
+                if row.get("reopen_reason"):
+                    kind["reopen_reasons"].append(row["reopen_reason"])
+    for kind in by_kind.values():
+        kind["reopen_rate"] = round(kind["reopened_within_72h"] / kind["conversations"], 2)
+    total = sum(k["conversations"] for k in by_kind.values())
+    reopened = sum(k["reopened_within_72h"] for k in by_kind.values())
+    wanted = (issue_type or "").strip().lower().replace(" ", "_")
+    return {
+        "pnr": pnr,
+        "issue_type_requested": issue_type,
+        "match": by_kind.get(wanted),
+        "known_issue_types": sorted(by_kind),
+        "by_issue_type": by_kind,
+        "overall": {"conversations": total, "reopened_within_72h": reopened,
+                    "reopen_rate": round(reopened / total, 2) if total else None},
+        "caveat": ("Sample of %d human-handled conversations (January storms); "
+                   "one or two per issue type, so per-type rates are anecdotal, "
+                   "not statistics. Not specific to this booking." % total),
+    }
+
+
+LOCAL_TOOLS: Dict[str, Any] = {"reopen_stats": reopen_stats}   # ✏️ Build 2, step 2.1: the functions behind them
 
 
 def text_of(response) -> str:

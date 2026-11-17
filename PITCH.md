@@ -2,13 +2,19 @@
 
 Six lines and a lever. Your words. The last two are scored.
 
-Built: a support agent for disrupted flights, with Larkspur's nine tools, seats_left written by us, and fare_rules over MCP
-Does: it finds the booking, looks for flights with free seats, holds one, and explains the fare rules in plain words.
-Number:
-Safety check:it holds a seat but never books it, only the customer's own click does. We saw it in the trace for K7PQ2M
-Next:let the agent answer customers in Spanish, not only in English.
-Still broken:when a customer sends two booking codes in one message, the agent only looks up the first one.
-Lever: <cost | speed | intelligence>
+Built: we added the reopen_stats extra tool
+
+Does: automate rebooking and reducing customer wait times
+
+Number: one more tool
+
+Safety check: all the verifications in the guidelines.
+
+Next:let the agent answer customers in Spanish, not only in English. Make a rebooking always with the customer approval a supervision.
+
+Still broken: The agent hasn´t yet the capability to rebook.
+
+Lever: <cost | speed | intelligence> All of them, with the intelligence we want a faster agent to save costs.
 
 ## Priya asked
 
