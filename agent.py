@@ -43,6 +43,26 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [{
         },
         "required": ["pnr", "issue_type"],
     },
+}, {
+    "name": "departures_in_window",
+    "description": (
+        "Lists non-cancelled flights departing from one airport on one date in the "
+        "4 hours starting at a given time, with delay and remaining seats. Use it "
+        "when a customer asks what else leaves from their airport around a time, "
+        "e.g. to compare against search_alternatives. Get the airport, date and "
+        "time from the booking or the customer, never guess them. Only reports "
+        "what is in the schedule data; if it returns an empty list, say no "
+        "flights were found and do not suggest any."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "airport": {"type": "string", "description": "Departure airport, 3-letter IATA code, e.g. 'DEN'."},
+            "date": {"type": "string", "description": "Local date, YYYY-MM-DD."},
+            "time": {"type": "string", "description": "Start of the 4-hour window, 24h local time HH:mm, e.g. '14:30'."}
+        },
+        "required": ["airport", "date", "time"]
+    },
 }]   # ✏️ Build 2, step 2.1: schemas for the tools you add
 def reopen_stats(pnr: str, issue_type: str) -> Dict[str, Any]:
     """How often each kind of problem came back within 72 hours, from the
@@ -83,7 +103,42 @@ def reopen_stats(pnr: str, issue_type: str) -> Dict[str, Any]:
     }
 
 
-LOCAL_TOOLS: Dict[str, Any] = {"reopen_stats": reopen_stats}   # ✏️ Build 2, step 2.1: the functions behind them
+WINDOW_MINUTES = 240
+
+
+def _minutes(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def departures_in_window(airport: str, date: str, time: str) -> Dict[str, Any]:
+    """Flights leaving `airport` on `date` from `time` up to WINDOW_MINUTES later,
+    read only from flights.csv. Nothing is invented: no match means an empty list
+    and a note saying so."""
+    from support.mock_backend import load_flights
+    start = _minutes(time)
+    flights = []
+    for row in load_flights():
+        if row["origin"] != airport.upper() or row["date"] != date:
+            continue
+        if row["status"] in ("CANCELLED", "DIVERTED"):
+            continue
+        est_dep = _minutes(row["sched_dep_local"]) + row["delay_min"]
+        if start <= est_dep <= start + WINDOW_MINUTES:
+            flights.append({
+                "flight_no": row["flight_no"], "dest": row["dest"],
+                "sched_dep_local": row["sched_dep_local"], "delay_min": row["delay_min"],
+                "status": row["status"],
+                "seats_left_Y": row["seats_left_Y"], "seats_left_J": row["seats_left_J"],
+            })
+    flights.sort(key=lambda f: _minutes(f["sched_dep_local"]) + f["delay_min"])
+    if not flights:
+        return {"flights": [], "note": "No departures found in flights.csv for %s on %s within %d minutes of %s."
+                % (airport, date, WINDOW_MINUTES, time)}
+    return {"flights": flights}
+
+
+LOCAL_TOOLS: Dict[str, Any] = {"reopen_stats": reopen_stats, "departures_in_window": departures_in_window}   # ✏️ Build 2, step 2.1: the functions behind them
 
 
 def text_of(response) -> str:
