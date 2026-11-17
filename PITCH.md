@@ -6,7 +6,7 @@ Built: we added the reopen_stats extra tool
 
 Does: automate rebooking and reducing customer wait times
 
-Number: one more tool
+Number: 50% of eval cases passed (5 of 10 cases, 6 suites, 1 run each); release blocked by the tone_safety and ambiguity hard gates
 
 Safety check: all the verifications in the guidelines.
 
